@@ -21,7 +21,7 @@ new #[Title('Enviar mensagem')] class extends Component {
      */
     public const string FREE_TEXT = 'text';
 
-    public ?int $contactId = null;
+    public string $contactId = '';
     public string $kind = '';
     public string $body = '';
 
@@ -31,14 +31,22 @@ new #[Title('Enviar mensagem')] class extends Component {
     public ?int $lastMessageId = null;
 
     /**
-     * Start over when another contact is selected.
+     * Adjust the form to the newly selected contact, keeping a template that was already chosen.
      */
     public function updatedContactId(): void
     {
-        $this->reset('body', 'parameters', 'lastMessageId');
+        $this->reset('body', 'lastMessageId');
         $this->resetValidation();
 
-        $this->kind = $this->contact?->hasOpenServiceWindow() ? self::FREE_TEXT : '';
+        $hasOpenWindow = $this->contact?->hasOpenServiceWindow() ?? false;
+
+        if ($this->kind === '' && $hasOpenWindow) {
+            $this->kind = self::FREE_TEXT;
+        } elseif ($this->kind === self::FREE_TEXT && ! $hasOpenWindow) {
+            $this->kind = '';
+        }
+
+        $this->suggestFirstParameter();
     }
 
     /**
@@ -49,6 +57,14 @@ new #[Title('Enviar mensagem')] class extends Component {
         $this->reset('parameters');
         $this->resetValidation();
 
+        $this->suggestFirstParameter();
+    }
+
+    /**
+     * Suggest the contact's first name for the first variable, which usually greets the recipient.
+     */
+    private function suggestFirstParameter(): void
+    {
         if (($this->template['variables'] ?? 0) > 0 && $this->contact !== null) {
             $this->parameters[1] = Str::before($this->contact->name, ' ');
         }
@@ -145,7 +161,7 @@ new #[Title('Enviar mensagem')] class extends Component {
     #[Computed]
     public function contact(): ?Contact
     {
-        return $this->contactId === null ? null : Contact::query()->find($this->contactId);
+        return $this->contactId === '' ? null : Contact::query()->find((int) $this->contactId);
     }
 
     /**
@@ -226,77 +242,78 @@ new #[Title('Enviar mensagem')] class extends Component {
                 @endforeach
             </flux:select>
 
-            @if ($this->contact)
-                @if ($this->contact->hasOpenServiceWindow())
-                    <div>
-                        <flux:badge color="green">
-                            {{ __('Janela de 24 horas aberta por mais :hours h', ['hours' => $this->contact->serviceWindowHoursLeft()]) }}
-                        </flux:badge>
-                    </div>
-                @else
-                    <flux:callout icon="clock" color="amber">
-                        <flux:callout.heading>{{ __('Janela de 24 horas fechada') }}</flux:callout.heading>
-                        <flux:callout.text>
-                            {{ __('Este contato não escreveu para a empresa nas últimas 24 horas, então o WhatsApp não entrega texto livre. Envie um template aprovado; quando o contato responder, a janela abre e o texto livre fica disponível.') }}
-                        </flux:callout.text>
-                    </flux:callout>
-                @endif
-
-                @if ($this->templates === null)
-                    <flux:callout variant="warning" icon="exclamation-triangle" data-test="templates-unavailable">
-                        <flux:callout.text>{{ __('Não foi possível carregar os templates da Meta agora. Recarregue a página em instantes.') }}</flux:callout.text>
-                    </flux:callout>
-                @endif
-
-                <flux:select wire:model.live="kind" :label="__('Tipo de mensagem')" :placeholder="__('Escolha o que enviar')">
-                    @if ($this->contact->hasOpenServiceWindow())
-                        <flux:select.option :value="$this::FREE_TEXT">{{ __('Texto livre') }}</flux:select.option>
-                    @endif
-
-                    @foreach ($this->templates ?? [] as $option)
-                        <flux:select.option :value="$option['key']" wire:key="template-option-{{ $option['key'] }}">
-                            {{ __('Template :name (:language)', ['name' => $option['name'], 'language' => $option['language']]) }}
-                        </flux:select.option>
-                    @endforeach
-                </flux:select>
-
-                @if ($kind === $this::FREE_TEXT)
-                    <flux:textarea wire:model="body" :label="__('Mensagem')" rows="4" />
-                @elseif ($this->template)
-                    @for ($number = 1; $number <= $this->template['variables']; $number++)
-                        <flux:input
-                            wire:key="parameter-{{ $this->template['key'] }}-{{ $number }}"
-                            wire:model.live.debounce.300ms="parameters.{{ $number }}"
-                            :label="__('Variável :number', ['number' => $number])"
-                            type="text"
-                        />
-                    @endfor
-
-                    <div class="flex flex-col gap-2" data-test="template-preview">
-                        <flux:label>{{ __('Pré-visualização') }}</flux:label>
-
-                        <div class="flex flex-col gap-3 rounded-lg border border-green-200 bg-green-50 px-3 py-2 dark:border-green-900 dark:bg-green-950">
-                            <flux:text class="whitespace-pre-line break-words text-zinc-800 dark:text-zinc-100">{{ $this->preview }}</flux:text>
-
-                            @if ($this->template['buttons'] !== [])
-                                <div class="flex flex-wrap gap-2">
-                                    @foreach ($this->template['buttons'] as $button)
-                                        <flux:badge wire:key="template-button-{{ $loop->index }}" color="zinc">{{ $button }}</flux:badge>
-                                    @endforeach
-                                </div>
-                            @endif
-                        </div>
-                    </div>
-                @endif
-
-                @if ($kind !== '')
-                    <div>
-                        <flux:button variant="primary" type="submit" icon="paper-airplane" data-test="send-message-button">
-                            {{ __('Enviar') }}
-                        </flux:button>
-                    </div>
-                @endif
+            @if ($this->contact?->hasOpenServiceWindow())
+                <div>
+                    <flux:badge color="green">
+                        {{ __('Janela de 24 horas aberta por mais :hours h', ['hours' => $this->contact->serviceWindowHoursLeft()]) }}
+                    </flux:badge>
+                </div>
+            @elseif ($this->contact)
+                <flux:callout icon="clock" color="amber">
+                    <flux:callout.heading>{{ __('Janela de 24 horas fechada') }}</flux:callout.heading>
+                    <flux:callout.text>
+                        {{ __('Este contato não escreveu para a empresa nas últimas 24 horas, então o WhatsApp não entrega texto livre. Envie um template aprovado; quando o contato responder, a janela abre e o texto livre fica disponível.') }}
+                    </flux:callout.text>
+                </flux:callout>
             @endif
+
+            @if ($this->templates === null)
+                <flux:callout variant="warning" icon="exclamation-triangle" data-test="templates-unavailable">
+                    <flux:callout.text>{{ __('Não foi possível carregar os templates da Meta agora. Recarregue a página em instantes.') }}</flux:callout.text>
+                </flux:callout>
+            @endif
+
+            <flux:select
+                wire:model.live="kind"
+                :label="__('Tipo de mensagem')"
+                :placeholder="__('Escolha o que enviar')"
+                :description="__('Lista os templates aprovados na Meta. O texto livre só aparece para contatos com a janela de 24 horas aberta.')"
+            >
+                @if ($this->contact?->hasOpenServiceWindow())
+                    <flux:select.option :value="$this::FREE_TEXT">{{ __('Texto livre') }}</flux:select.option>
+                @endif
+
+                @foreach ($this->templates ?? [] as $option)
+                    <flux:select.option :value="$option['key']" wire:key="template-option-{{ $option['key'] }}">
+                        {{ __('Template :name (:language)', ['name' => $option['name'], 'language' => $option['language']]) }}
+                    </flux:select.option>
+                @endforeach
+            </flux:select>
+
+            @if ($kind === $this::FREE_TEXT)
+                <flux:textarea wire:model="body" :label="__('Mensagem')" rows="4" />
+            @elseif ($this->template)
+                @for ($number = 1; $number <= $this->template['variables']; $number++)
+                    <flux:input
+                        wire:key="parameter-{{ $this->template['key'] }}-{{ $number }}"
+                        wire:model.live.debounce.300ms="parameters.{{ $number }}"
+                        :label="__('Variável :number', ['number' => $number])"
+                        type="text"
+                    />
+                @endfor
+
+                <div class="flex flex-col gap-2" data-test="template-preview">
+                    <flux:label>{{ __('Pré-visualização') }}</flux:label>
+
+                    <div class="flex flex-col gap-3 rounded-lg border border-green-200 bg-green-50 px-3 py-2 dark:border-green-900 dark:bg-green-950">
+                        <flux:text class="whitespace-pre-line break-words text-zinc-800 dark:text-zinc-100">{{ $this->preview }}</flux:text>
+
+                        @if ($this->template['buttons'] !== [])
+                            <div class="flex flex-wrap gap-2">
+                                @foreach ($this->template['buttons'] as $button)
+                                    <flux:badge wire:key="template-button-{{ $loop->index }}" color="zinc">{{ $button }}</flux:badge>
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
+                </div>
+            @endif
+
+            <div>
+                <flux:button variant="primary" type="submit" icon="paper-airplane" data-test="send-message-button">
+                    {{ __('Enviar') }}
+                </flux:button>
+            </div>
         </form>
 
         @if ($this->lastMessage)

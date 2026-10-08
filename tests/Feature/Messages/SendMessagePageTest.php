@@ -37,14 +37,32 @@ class SendMessagePageTest extends TestCase
         $this->get(route('messages.send'))->assertRedirect(route('login'));
     }
 
-    public function test_authenticated_users_can_open_the_page(): void
+    public function test_page_lists_the_contacts_and_the_approved_templates_before_a_recipient_is_chosen(): void
     {
+        Http::preventStrayRequests();
+        Http::fake($this->metaResponses());
         $this->actingAs(User::factory()->create());
         Contact::factory()->create(['name' => 'Maria Souza']);
 
         $this->get(route('messages.send'))
             ->assertOk()
-            ->assertSee('Maria Souza');
+            ->assertSee('Maria Souza')
+            ->assertSee('Template rf_link (pt_BR)')
+            ->assertDontSee('Texto livre');
+    }
+
+    public function test_template_chosen_before_the_recipient_is_kept_and_greets_the_contact(): void
+    {
+        Http::preventStrayRequests();
+        Http::fake($this->metaResponses());
+        $this->actingAs(User::factory()->create());
+        $contact = Contact::factory()->withOpenServiceWindow()->create(['name' => 'Maria Souza']);
+
+        Livewire::test('pages::messages.send')
+            ->set('kind', 'rf_link|pt_BR')
+            ->set('contactId', $contact->id)
+            ->assertSet('kind', 'rf_link|pt_BR')
+            ->assertSet('parameters.1', 'Maria');
     }
 
     public function test_text_is_sent_and_the_message_id_is_shown_while_the_service_window_is_open(): void
@@ -96,7 +114,7 @@ class SendMessagePageTest extends TestCase
         Livewire::test('pages::messages.send')
             ->set('contactId', $contact->id)
             ->assertSee('Janela de 24 horas fechada')
-            ->assertDontSee('Texto livre')
+            ->assertDontSee('Texto livre</option>', false)
             ->set('kind', 'text')
             ->set('body', 'Texto que não pode ser enviado')
             ->call('send')
