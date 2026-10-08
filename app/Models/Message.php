@@ -14,8 +14,10 @@ use Illuminate\Support\Carbon;
 /**
  * @property int $id
  * @property int $contact_id
+ * @property int|null $api_token_id
  * @property MessageDirection $direction
  * @property string|null $wamid
+ * @property string|null $idempotency_key
  * @property string $type
  * @property string|null $template_name
  * @property string|null $body
@@ -27,7 +29,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['contact_id', 'direction', 'wamid', 'type', 'template_name', 'body', 'status', 'status_at', 'error_code', 'error_message', 'sent_at'])]
+#[Fillable(['contact_id', 'api_token_id', 'direction', 'wamid', 'idempotency_key', 'type', 'template_name', 'body', 'status', 'status_at', 'error_code', 'error_message', 'sent_at'])]
 class Message extends Model
 {
     /** @use HasFactory<MessageFactory> */

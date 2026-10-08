@@ -94,6 +94,22 @@ class Contact extends Model
     }
 
     /**
+     * Find the contact that owns the given phone number, in any form WhatsApp reports it.
+     */
+    public static function findByPhone(string $phone): ?self
+    {
+        return self::query()->forWhatsAppId($phone)->first();
+    }
+
+    /**
+     * Find the contact that owns the given phone number, creating it when it is new.
+     */
+    public static function findOrCreateByPhone(string $phone, ?string $name = null): self
+    {
+        return self::findByPhone($phone) ?? self::create(['name' => $name ?? $phone, 'phone' => $phone]);
+    }
+
+    /**
      * Get the forms under which WhatsApp may identify the given phone number.
      *
      * Brazilian mobile numbers are reported with or without the ninth digit.
