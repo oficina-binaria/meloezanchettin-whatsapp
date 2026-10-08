@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\WhatsApp\ProcessWhatsAppWebhook;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Support\Facades\Log;
 
 class WhatsAppWebhookController extends Controller
 {
@@ -29,9 +29,9 @@ class WhatsAppWebhookController extends Controller
     /**
      * Receive a webhook notification sent by the WhatsApp Cloud API.
      */
-    public function store(Request $request): Response
+    public function store(Request $request, ProcessWhatsAppWebhook $processWebhook): Response
     {
-        Log::info('WhatsApp webhook received.', ['payload' => $request->json()->all()]);
+        $processWebhook->handle($request->json()->all());
 
         return response()->noContent(Response::HTTP_OK);
     }

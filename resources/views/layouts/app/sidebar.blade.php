@@ -15,6 +15,12 @@
                     <flux:sidebar.item icon="home" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>
                         {{ __('Dashboard') }}
                     </flux:sidebar.item>
+                    <flux:sidebar.item icon="paper-airplane" :href="route('messages.send')" :current="request()->routeIs('messages.send')" wire:navigate>
+                        {{ __('Enviar mensagem') }}
+                    </flux:sidebar.item>
+                    <flux:sidebar.item icon="users" :href="route('contacts.index')" :current="request()->routeIs('contacts.index')" wire:navigate>
+                        {{ __('Contatos') }}
+                    </flux:sidebar.item>
                 </flux:sidebar.group>
             </flux:sidebar.nav>
 

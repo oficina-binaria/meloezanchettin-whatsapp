@@ -2,12 +2,14 @@
 
 namespace Tests\Feature\Http\Controllers;
 
-use Illuminate\Support\Facades\Log;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 class WhatsAppWebhookControllerTest extends TestCase
 {
+    use RefreshDatabase;
+
     private const string APP_SECRET = 'fake-app-secret';
 
     private const string VERIFY_TOKEN = 'fake-verify-token';
@@ -19,6 +21,7 @@ class WhatsAppWebhookControllerTest extends TestCase
         config([
             'services.whatsapp.app_secret' => self::APP_SECRET,
             'services.whatsapp.webhook_verify_token' => self::VERIFY_TOKEN,
+            'services.whatsapp.phone_number_id' => '1234567890',
         ]);
     }
 
@@ -58,29 +61,24 @@ class WhatsAppWebhookControllerTest extends TestCase
         $response->assertForbidden();
     }
 
-    public function test_notification_signed_with_the_app_secret_is_logged_and_returns_200(): void
+    public function test_notification_signed_with_the_app_secret_is_stored_and_returns_200(): void
     {
-        Log::spy();
-        $payload = ['object' => 'whatsapp_business_account', 'entry' => [['id' => '123']]];
-        $body = json_encode($payload, JSON_THROW_ON_ERROR);
+        $body = json_encode($this->inboundNotification(), JSON_THROW_ON_ERROR);
 
         $response = $this->postNotification($body, 'sha256='.hash_hmac('sha256', $body, self::APP_SECRET));
 
         $response->assertOk();
-        Log::shouldHaveReceived('info')
-            ->once()
-            ->with('WhatsApp webhook received.', ['payload' => $payload]);
+        $this->assertDatabaseHas('messages', ['wamid' => 'wamid.IN1', 'body' => 'Bom dia']);
     }
 
-    public function test_notification_returns_401_and_is_not_logged_when_the_signature_is_wrong(): void
+    public function test_notification_returns_401_and_is_not_stored_when_the_signature_is_wrong(): void
     {
-        Log::spy();
-        $body = json_encode(['object' => 'whatsapp_business_account'], JSON_THROW_ON_ERROR);
+        $body = json_encode($this->inboundNotification(), JSON_THROW_ON_ERROR);
 
         $response = $this->postNotification($body, 'sha256='.hash_hmac('sha256', $body, 'another-secret'));
 
         $response->assertUnauthorized();
-        Log::shouldNotHaveReceived('info');
+        $this->assertDatabaseCount('messages', 0);
     }
 
     public function test_notification_returns_401_when_the_signature_header_is_missing(): void
@@ -98,6 +96,34 @@ class WhatsAppWebhookControllerTest extends TestCase
         $response = $this->postNotification($body, 'sha256='.hash_hmac('sha256', $body, ''));
 
         $response->assertUnauthorized();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function inboundNotification(): array
+    {
+        return [
+            'object' => 'whatsapp_business_account',
+            'entry' => [[
+                'id' => '4529573614035882',
+                'changes' => [[
+                    'field' => 'messages',
+                    'value' => [
+                        'messaging_product' => 'whatsapp',
+                        'metadata' => ['display_phone_number' => '15550000000', 'phone_number_id' => '1234567890'],
+                        'contacts' => [['profile' => ['name' => 'Maria Souza'], 'wa_id' => '556799990000']],
+                        'messages' => [[
+                            'from' => '556799990000',
+                            'id' => 'wamid.IN1',
+                            'timestamp' => '1791475717',
+                            'type' => 'text',
+                            'text' => ['body' => 'Bom dia'],
+                        ]],
+                    ],
+                ]],
+            ]],
+        ];
     }
 
     /**
