@@ -17,7 +17,7 @@ class ListWhatsAppTemplates
     /**
      * Get the approved templates of the business account that this app is able to send.
      *
-     * Only templates made of plain text with numbered body variables are supported.
+     * Only templates made of plain text, numbered body variables and fixed buttons are supported.
      *
      * @return list<array{key: string, name: string, language: string, body: string, variables: int, buttons: list<string>}>
      *
@@ -64,10 +64,7 @@ class ListWhatsAppTemplates
                 'BODY' => $hasBody = true,
                 'FOOTER' => true,
                 'HEADER' => ($component['format'] ?? null) === 'TEXT' && ! str_contains($component['text'] ?? '', '{{'),
-                'BUTTONS' => array_all(
-                    $component['buttons'] ?? [],
-                    fn (array $button): bool => ($button['type'] ?? null) === 'QUICK_REPLY',
-                ),
+                'BUTTONS' => array_all($component['buttons'] ?? [], $this->isStaticButton(...)),
                 default => false,
             };
 
@@ -77,6 +74,20 @@ class ListWhatsAppTemplates
         }
 
         return $hasBody;
+    }
+
+    /**
+     * Determine whether the button needs no parameter when the template is sent.
+     *
+     * @param  array<string, mixed>  $button
+     */
+    private function isStaticButton(array $button): bool
+    {
+        return match ($button['type'] ?? null) {
+            'QUICK_REPLY', 'PHONE_NUMBER' => true,
+            'URL' => ! str_contains($button['url'] ?? '', '{{'),
+            default => false,
+        };
     }
 
     /**

@@ -56,9 +56,13 @@ class ListWhatsAppTemplatesTest extends TestCase
                     ['type' => 'HEADER', 'format' => 'IMAGE'],
                     ['type' => 'BODY', 'text' => 'Texto'],
                 ]),
-                $this->template('com_botao_de_link', 'APPROVED', [
+                $this->template('com_link_variavel', 'APPROVED', [
                     ['type' => 'BODY', 'text' => 'Texto'],
                     ['type' => 'BUTTONS', 'buttons' => [['type' => 'URL', 'text' => 'Abrir', 'url' => 'https://exemplo.com/{{1}}']]],
+                ]),
+                $this->template('com_link_fixo', 'APPROVED', [
+                    ['type' => 'BODY', 'text' => 'Texto'],
+                    ['type' => 'BUTTONS', 'buttons' => [['type' => 'URL', 'text' => 'Abrir', 'url' => 'https://exemplo.com/pedidos']]],
                 ]),
                 $this->template('simples', 'APPROVED', [['type' => 'BODY', 'text' => 'Texto']]),
             ]]),
@@ -66,7 +70,7 @@ class ListWhatsAppTemplatesTest extends TestCase
 
         $templates = app(ListWhatsAppTemplates::class)->handle();
 
-        $this->assertSame(['simples'], array_column($templates, 'name'));
+        $this->assertSame(['com_link_fixo', 'simples'], array_column($templates, 'name'));
     }
 
     public function test_asks_meta_only_once_while_the_list_is_cached(): void
