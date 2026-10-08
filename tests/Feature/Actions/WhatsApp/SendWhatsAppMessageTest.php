@@ -17,6 +17,12 @@ class SendWhatsAppMessageTest extends TestCase
 
     private const string MESSAGES_URL = 'https://graph.facebook.com/v25.0/1234567890/messages';
 
+    private const array LINK_TEMPLATE = [
+        'name' => 'rf_link',
+        'language' => 'pt_BR',
+        'body' => 'Olá, {{1}}! Segue o link: {{2}}',
+    ];
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -39,7 +45,7 @@ class SendWhatsAppMessageTest extends TestCase
         ]);
         $contact = Contact::factory()->create(['phone' => '5567999990000']);
 
-        $message = app(SendWhatsAppMessage::class)->handle($contact, 'Olá!');
+        $message = app(SendWhatsAppMessage::class)->sendText($contact, 'Olá!');
 
         Http::assertSent(fn (Request $request): bool => $request->url() === self::MESSAGES_URL
             && $request->data() === [
@@ -54,13 +60,14 @@ class SendWhatsAppMessageTest extends TestCase
             'direction' => MessageDirection::Outbound,
             'wamid' => 'wamid.ACCEPTED',
             'type' => 'text',
+            'template_name' => null,
             'body' => 'Olá!',
             'status' => MessageStatus::Accepted,
         ]);
         $this->assertSame('556799990000', $contact->refresh()->wa_id);
     }
 
-    public function test_sends_the_fallback_template_when_no_text_is_given(): void
+    public function test_sends_a_template_with_its_variables_and_records_the_rendered_text(): void
     {
         Http::preventStrayRequests();
         Http::fake([
@@ -68,12 +75,41 @@ class SendWhatsAppMessageTest extends TestCase
         ]);
         $contact = Contact::factory()->create();
 
-        $message = app(SendWhatsAppMessage::class)->handle($contact);
+        $message = app(SendWhatsAppMessage::class)
+            ->sendTemplate($contact, self::LINK_TEMPLATE, ['Maria', 'https://exemplo.com/rf/abc123']);
 
         Http::assertSent(fn (Request $request): bool => $request['type'] === 'template'
-            && $request['template'] === ['name' => 'hello_world', 'language' => ['code' => 'en_US']]);
+            && $request['template'] === [
+                'name' => 'rf_link',
+                'language' => ['code' => 'pt_BR'],
+                'components' => [[
+                    'type' => 'body',
+                    'parameters' => [
+                        ['type' => 'text', 'text' => 'Maria'],
+                        ['type' => 'text', 'text' => 'https://exemplo.com/rf/abc123'],
+                    ],
+                ]],
+            ]);
         $this->assertSame('template', $message->type);
-        $this->assertSame('hello_world', $message->body);
+        $this->assertSame('rf_link', $message->template_name);
+        $this->assertSame('Olá, Maria! Segue o link: https://exemplo.com/rf/abc123', $message->body);
+    }
+
+    public function test_sends_a_template_without_components_when_it_has_no_variables(): void
+    {
+        Http::preventStrayRequests();
+        Http::fake([
+            self::MESSAGES_URL => Http::response(['messages' => [['id' => 'wamid.TEMPLATE']]]),
+        ]);
+        $contact = Contact::factory()->create();
+
+        app(SendWhatsAppMessage::class)
+            ->sendTemplate($contact, ['name' => 'hello_world', 'language' => 'en_US', 'body' => 'Hello World']);
+
+        Http::assertSent(fn (Request $request): bool => $request['template'] === [
+            'name' => 'hello_world',
+            'language' => ['code' => 'en_US'],
+        ]);
     }
 
     public function test_records_a_failed_message_with_the_api_error_when_the_api_rejects_it(): void
@@ -84,7 +120,7 @@ class SendWhatsAppMessageTest extends TestCase
         ]);
         $contact = Contact::factory()->create();
 
-        $message = app(SendWhatsAppMessage::class)->handle($contact, 'Olá!');
+        $message = app(SendWhatsAppMessage::class)->sendText($contact, 'Olá!');
 
         $this->assertDatabaseHas('messages', [
             'id' => $message->id,
@@ -103,7 +139,7 @@ class SendWhatsAppMessageTest extends TestCase
         ]);
         $contact = Contact::factory()->create();
 
-        $message = app(SendWhatsAppMessage::class)->handle($contact, 'Olá!');
+        $message = app(SendWhatsAppMessage::class)->sendText($contact, 'Olá!');
 
         $this->assertSame(MessageStatus::Failed, $message->status);
         $this->assertStringContainsString('Não foi possível conectar', $message->error_message);

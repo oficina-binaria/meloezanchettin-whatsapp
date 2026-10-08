@@ -74,7 +74,7 @@ class ProcessWhatsAppWebhook
             'contact_id' => $contact->id,
             'direction' => MessageDirection::Inbound,
             'type' => $data['type'] ?? 'unknown',
-            'body' => $data['text']['body'] ?? null,
+            'body' => $data['text']['body'] ?? $data['button']['text'] ?? $data['interactive']['button_reply']['title'] ?? null,
             'sent_at' => $sentAt,
         ]);
     }

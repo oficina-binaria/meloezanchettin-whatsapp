@@ -62,6 +62,24 @@ class ProcessWhatsAppWebhookTest extends TestCase
         $this->assertNotNull($contact->last_inbound_at);
     }
 
+    public function test_quick_reply_button_press_is_stored_with_the_button_text(): void
+    {
+        $payload = $this->payload(self::PHONE_NUMBER_ID, [
+            'contacts' => [['profile' => ['name' => 'Maria Souza'], 'wa_id' => '556799990000']],
+            'messages' => [[
+                'from' => '556799990000',
+                'id' => 'wamid.BUTTON',
+                'timestamp' => (string) self::RECEIVED_AT,
+                'type' => 'button',
+                'button' => ['payload' => 'Concluído', 'text' => 'Concluído'],
+            ]],
+        ]);
+
+        app(ProcessWhatsAppWebhook::class)->handle($payload);
+
+        $this->assertDatabaseHas('messages', ['wamid' => 'wamid.BUTTON', 'type' => 'button', 'body' => 'Concluído']);
+    }
+
     public function test_redelivered_notification_does_not_duplicate_the_message(): void
     {
         $payload = $this->inboundPayload('556799990000', 'wamid.IN1', 'Oi');

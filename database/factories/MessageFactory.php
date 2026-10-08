@@ -25,6 +25,7 @@ class MessageFactory extends Factory
             'direction' => MessageDirection::Outbound,
             'wamid' => 'wamid.'.fake()->unique()->regexify('[A-Za-z0-9]{40}'),
             'type' => 'text',
+            'template_name' => null,
             'body' => fake()->sentence(),
             'status' => MessageStatus::Accepted,
             'status_at' => now(),

@@ -12,29 +12,78 @@ use Illuminate\Support\Facades\Http;
 class SendWhatsAppMessage
 {
     /**
-     * The pre-approved template sent when free-form text is not allowed.
+     * Send free-form text to the contact and record the outcome.
+     *
+     * Meta only delivers free-form text while the contact's service window is open.
      */
-    public const string FALLBACK_TEMPLATE = 'hello_world';
+    public function sendText(Contact $contact, string $text): Message
+    {
+        return $this->send(
+            $contact,
+            new Message(['type' => 'text', 'body' => $text]),
+            ['type' => 'text', 'text' => ['body' => $text]],
+        );
+    }
 
     /**
-     * Send a message to the contact and record the outcome.
+     * Send an approved template to the contact and record the outcome.
      *
-     * Free-form text is sent when given; otherwise the fallback template is sent.
+     * @param  array{name: string, language: string, body: string}  $template
+     * @param  list<string>  $parameters  Values for the numbered body variables, in order.
      */
-    public function handle(Contact $contact, ?string $text = null): Message
+    public function sendTemplate(Contact $contact, array $template, array $parameters = []): Message
     {
-        $message = new Message([
+        $payload = ['name' => $template['name'], 'language' => ['code' => $template['language']]];
+
+        if ($parameters !== []) {
+            $payload['components'] = [[
+                'type' => 'body',
+                'parameters' => array_map(fn (string $value): array => ['type' => 'text', 'text' => $value], $parameters),
+            ]];
+        }
+
+        return $this->send(
+            $contact,
+            new Message([
+                'type' => 'template',
+                'template_name' => $template['name'],
+                'body' => self::renderTemplate($template['body'], $parameters),
+            ]),
+            ['type' => 'template', 'template' => $payload],
+        );
+    }
+
+    /**
+     * Replace the numbered variables of a template body with the given values.
+     *
+     * @param  list<string>  $parameters
+     */
+    public static function renderTemplate(string $body, array $parameters): string
+    {
+        return preg_replace_callback(
+            '/\{\{(\d+)\}\}/',
+            fn (array $matches): string => filled($parameters[(int) $matches[1] - 1] ?? null) ? $parameters[(int) $matches[1] - 1] : $matches[0],
+            $body,
+        );
+    }
+
+    /**
+     * Call the Cloud API and store the message with the result.
+     *
+     * @param  array<string, mixed>  $content
+     */
+    private function send(Contact $contact, Message $message, array $content): Message
+    {
+        $message->fill([
             'contact_id' => $contact->id,
             'direction' => MessageDirection::Outbound,
-            'type' => $text === null ? 'template' : 'text',
-            'body' => $text ?? self::FALLBACK_TEMPLATE,
             'status_at' => now(),
         ]);
 
         try {
             $response = Http::whatsapp()->post(
                 config('services.whatsapp.phone_number_id').'/messages',
-                $this->payload($contact, $text),
+                ['messaging_product' => 'whatsapp', 'to' => $contact->phone, ...$content],
             );
         } catch (ConnectionException $exception) {
             $message->fill([
@@ -49,7 +98,7 @@ class SendWhatsAppMessage
             $message->fill([
                 'status' => MessageStatus::Failed,
                 'error_code' => $response->json('error.code'),
-                'error_message' => $response->json('error.message', 'HTTP '.$response->status()),
+                'error_message' => $response->json('error.error_data.details') ?? $response->json('error.message', 'HTTP '.$response->status()),
             ])->save();
 
             return $message;
@@ -66,27 +115,5 @@ class SendWhatsAppMessage
         }
 
         return $message;
-    }
-
-    /**
-     * Build the Cloud API payload for the message.
-     *
-     * @return array{messaging_product: string, to: string, type: string, text?: array{body: string}, template?: array{name: string, language: array{code: string}}}
-     */
-    private function payload(Contact $contact, ?string $text): array
-    {
-        $payload = [
-            'messaging_product' => 'whatsapp',
-            'to' => $contact->phone,
-        ];
-
-        if ($text !== null) {
-            return [...$payload, 'type' => 'text', 'text' => ['body' => $text]];
-        }
-
-        return [...$payload, 'type' => 'template', 'template' => [
-            'name' => self::FALLBACK_TEMPLATE,
-            'language' => ['code' => 'en_US'],
-        ]];
     }
 }
