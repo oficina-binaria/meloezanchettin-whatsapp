@@ -18,6 +18,9 @@
                     <flux:sidebar.item icon="paper-airplane" :href="route('messages.send')" :current="request()->routeIs('messages.send')" wire:navigate>
                         {{ __('Enviar mensagem') }}
                     </flux:sidebar.item>
+                    <flux:sidebar.item icon="chat-bubble-left-right" :href="route('messages.index')" :current="request()->routeIs('messages.index')" wire:navigate>
+                        {{ __('Mensagens') }}
+                    </flux:sidebar.item>
                     <flux:sidebar.item icon="users" :href="route('contacts.index')" :current="request()->routeIs('contacts.index')" wire:navigate>
                         {{ __('Contatos') }}
                     </flux:sidebar.item>
